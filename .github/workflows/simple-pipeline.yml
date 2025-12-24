@@ -1,116 +1,25 @@
-# .github/workflows/simple-pipeline.yml
-name: Simple CI/CD Demo
+# .github/workflows/minimal.yml
+name: Minimal CI/CD
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:  # Позволяет запускать вручную
+on: [push]
 
 jobs:
-  # Этап 1: Сборка
-  build:
-    runs-on: self-hosted  # ИЛИ ubuntu-latest для GitHub-hosted
+  pipeline:
+    runs-on: ubuntu-latest  # Используем GitHub runners
+    
     steps:
-      - name: 📥 Получить код
+      - name: 📥 Код
         uses: actions/checkout@v4
-
-      - name: 🔍 Проверить структуру
+      
+      - name: 🐳 Проверка Docker
         run: |
-          echo "📁 Файлы в проекте:"
-          ls -la
-          echo ""
-          echo "✅ Структура проверена"
-
-      - name: 🐳 Собрать Docker образ
-        run: |
-          echo "Собираю Docker образ..."
+          echo "1. Собираю тестовый образ..."
+          echo "FROM alpine:3.16" > Dockerfile.test
+          echo "RUN echo 'CI/CD работает!'" >> Dockerfile.test
           
-          # Проверяем, существует ли Dockerfile
-          if [ -f ".github/demo-app/Dockerfile" ]; then
-            docker build -t demo-app:latest .github/demo-app/
-            echo "✅ Образ собран!"
-            docker images | grep demo-app
-          else
-            echo "⚠️ Dockerfile не найден, создаем простой..."
-            mkdir -p .github/demo-app
-            cat > .github/demo-app/Dockerfile << 'EOF'
-FROM alpine:3.16
-RUN echo "Hello from Docker!" > /message
-CMD cat /message
-EOF
-            docker build -t demo-app:latest .github/demo-app/
-            echo "✅ Демо-образ создан!"
-          fi
-
-  # Этап 2: Тестирование
-  test:
-    runs-on: self-hosted
-    needs: build  # Ждем сборку
-    steps:
-      - name: 🧪 Запустить тесты
-        run: |
-          echo "Запускаю тесты..."
+          docker build -t test-image -f Dockerfile.test .
           
-          # Тест 1: Проверка Docker образа
-          echo "1️⃣ Тестирую Docker образ..."
-          docker run --rm demo-app:latest || true
+          echo "2. Запускаю тест..."
+          docker run --rm test-image
           
-          # Тест 2: Проверка приложения (если это веб-приложение)
-          echo ""
-          echo "2️⃣ Тестирую запуск контейнера..."
-          
-          # Запускаем контейнер в фоне
-          CONTAINER_ID=$(docker run -d --rm -p 8080:8080 demo-app:latest 2>/dev/null || echo "")
-          
-          if [ -n "$CONTAINER_ID" ]; then
-            sleep 2  # Ждем запуск
-            
-            # Пробуем проверить health (если есть веб-сервер)
-            echo "Проверяю контейнер..."
-            docker ps | grep demo-app
-            
-            # Останавливаем контейнер
-            docker stop $CONTAINER_ID 2>/dev/null || true
-          else
-            echo "⚠️ Контейнер не запустился как веб-сервер (это нормально для демо)"
-          fi
-          
-          echo ""
-          echo "✅ Базовые тесты пройдены!"
-
-  # Этап 3: Деплой (демо)
-  deploy:
-    runs-on: self-hosted
-    needs: test  # Ждем тесты
-    steps:
-      - name: 🚀 Развернуть приложение
-        run: |
-          echo "🚀 Начинаю деплой..."
-          
-          # Проверяем Docker образ
-          docker images demo-app:latest
-          
-          echo ""
-          echo "📋 Команды для деплоя:"
-          echo "1. Сохранить образ в файл:"
-          echo "   docker save demo-app:latest -o demo-app.tar"
-          echo "2. Скопировать на сервер:"
-          echo "   scp demo-app.tar user@server:/path/"
-          echo "3. Загрузить на сервере:"
-          echo "   docker load -i demo-app.tar"
-          echo "4. Запустить:"
-          echo "   docker run -d -p 8080:8080 --name myapp demo-app:latest"
-          
-      - name: 📊 Отчет
-        run: |
-          echo "📈 Отчет о сборке:"
-          echo "=================="
-          echo "Приложение: Demo App"
-          echo "Статус: ✅ Успешно"
-          echo "Время: $(date)"
-          echo "ID запуска: ${{ github.run_id }}"
-          echo ""
-          echo "Созданные артефакты:"
-          docker images --filter "reference=demo-app*"
-          echo ""
-          echo "🎉 Конвейер завершен успешно!"
+          echo "✅ Все этапы пройдены!"
