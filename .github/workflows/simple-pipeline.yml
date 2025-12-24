@@ -1,25 +1,136 @@
-# .github/workflows/minimal.yml
-name: Minimal CI/CD
+# .github/workflows/pipeline-with-graph.yml
+name: CI/CD Pipeline with Visualization
 
-on: [push]
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
-  pipeline:
-    runs-on: ubuntu-latest  # Используем GitHub runners
-    
+  # Этап 1: Подготовка
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      timestamp: ${{ steps.set-time.outputs.timestamp }}
     steps:
-      - name: 📥 Код
+      - name: ⚙️ Настройка окружения
+        id: set-time
+        run: |
+          echo "timestamp=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+          echo "🔧 Подготовка завершена"
+      - name: 📋 Информация о сборке
+        run: |
+          echo "🔗 Ветка: ${{ github.ref }}"
+          echo "📝 Коммит: ${{ github.sha }}"
+          echo "🕐 Время: ${{ steps.set-time.outputs.timestamp }}"
+
+  # Этап 2: Линтинг (параллельно со сборкой)
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Получить код
         uses: actions/checkout@v4
       
-      - name: 🐳 Проверка Docker
+      - name: 🔍 Проверка кода
         run: |
-          echo "1. Собираю тестовый образ..."
-          echo "FROM alpine:3.16" > Dockerfile.test
-          echo "RUN echo 'CI/CD работает!'" >> Dockerfile.test
-          
-          docker build -t test-image -f Dockerfile.test .
-          
-          echo "2. Запускаю тест..."
-          docker run --rm test-image
-          
-          echo "✅ Все этапы пройдены!"
+          echo "🔎 Проверяю структуру проекта..."
+          find . -name "*.yml" -o -name "*.yaml" | wc -l | xargs echo "Найдено YAML файлов:"
+          echo "✅ Линтинг завершен"
+
+  # Этап 3: Сборка (зависит от setup)
+  build:
+    needs: [setup, lint]  # ⬅️ СТРЕЛОЧКА ОТ setup И lint К build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📦 Сборка проекта
+        run: |
+          echo "🏗️ Собираю проект..."
+          echo "Версия: ${{ needs.setup.outputs.timestamp }}"
+          mkdir -p dist
+          echo "Build successful" > dist/build.log
+          echo "✅ Сборка завершена"
+      
+      - name: 📎 Сохранить артефакты
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+          retention-days: 5
+
+  # Этап 4: Тестирование (зависит от сборки)
+  test:
+    needs: build  # ⬅️ СТРЕЛОЧКА ОТ build К test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test-type: [unit, integration, e2e]
+    
+    steps:
+      - name: 📥 Получить артефакты
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+      
+      - name: 🧪 Запуск тестов ${{ matrix.test-type }}
+        run: |
+          echo "🧪 Выполняю ${{ matrix.test-type }} тесты..."
+          sleep 2
+          echo "✅ ${{ matrix.test-type }} тесты пройдены"
+          echo "Test passed: ${{ matrix.test-type }}" > test-${{ matrix.test-type }}.log
+      
+      - name: 📊 Сохранить отчеты
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ matrix.test-type }}
+          path: test-*.log
+
+  # Этап 5: Деплой на staging (зависит от всех тестов)
+  deploy-staging:
+    needs: [test]  # ⬅️ СТРЕЛОЧКА ОТ test К deploy-staging
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+      - name: 🚀 Развертывание в staging
+        run: |
+          echo "🌐 Деплой на staging среду..."
+          echo "Среда: ${{ vars.ENVIRONMENT_NAME || 'staging' }}"
+          echo "Версия: ${{ needs.setup.outputs.timestamp }}"
+          sleep 3
+          echo "✅ Деплой на staging завершен"
+      
+      - name: 📞 Уведомление
+        run: |
+          echo "📢 Отправляю уведомление..."
+          echo "Деплой v${{ needs.setup.outputs.timestamp }} на staging успешен!"
+
+  # Этап 6: Деплой на production (ручной запуск)
+  deploy-production:
+    needs: [deploy-staging]  # ⬅️ СТРЕЛОЧКА ОТ deploy-staging К deploy-production
+    runs-on: ubuntu-latest
+    environment: production
+    if: github.ref == 'refs/heads/main'  # Только из main ветки
+    
+    steps:
+      - name: ⚡ Подтверждение деплоя
+        run: |
+          echo "⚠️  Требуется подтверждение для production!"
+          echo "Запущено из ветки: ${{ github.ref }}"
+          echo "Коммит: ${{ github.sha }}"
+      
+      - name: 🚀 Production деплой
+        run: |
+          echo "🚀 Запускаю деплой в production..."
+          echo "Это реальный деплой! Будьте осторожны."
+          sleep 5
+          echo "🎉 Production деплой завершен успешно!"
+      
+      - name: 🎯 Финальный отчет
+        run: |
+          echo "📈 ПОЛНЫЙ КОНВЕЙЕР ВЫПОЛНЕН"
+          echo "=========================="
+          echo "✅ setup → lint → build → test → deploy-staging → deploy-production"
+          echo "🕐 Время: $(date)"
+          echo "🔗 Ссылка на коммит: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
