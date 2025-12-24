@@ -1,0 +1,52 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: self-hosted  # Используем наш локальный раннер
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build application
+        run: |
+          echo "Building application..."
+          echo "Done"
+
+  test:
+    runs-on: self-hosted
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run unit tests
+        run: echo "Running unit tests"
+
+      - name: Run lint tests
+        run: echo "Running lint tests"
+
+  package:
+    runs-on: self-hosted
+    needs: test
+    steps:
+      - name: Build Docker image
+        run: |
+          echo "Building Docker image..."
+          docker build -t myapp:latest .  # если есть Dockerfile
+
+      - name: Tag image
+        run: echo "Tagging image"
+
+  deploy:
+    runs-on: self-hosted
+    needs: package
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Deploy to staging
+        run: echo "Deploying to staging server"
