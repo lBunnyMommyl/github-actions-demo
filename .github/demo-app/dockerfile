@@ -1,0 +1,18 @@
+# .github/demo-app/Dockerfile
+FROM alpine:3.16
+
+# Устанавливаем Python (для демо)
+RUN apk add --no-cache python3 py3-pip \
+    && pip3 install flask
+
+# Копируем наш простой скрипт
+COPY app.py /app/
+
+# Устанавливаем рабочую директорию
+WORKDIR /app
+
+# Открываем порт
+EXPOSE 8080
+
+# Команда запуска
+CMD ["python3", "app.py"]
